@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+pragma solidity 0.8.0;
 
 import "./ERC20.sol";
 import "./Ownable.sol";
@@ -12,9 +12,9 @@ contract Token is ERC20, Ownable {
   uint8 constant ADMIN_TAX = 10;
   uint8 constant REWARD_TAX = 25;
 
-  uint8 private burnTax;
-  uint8 private adminTax;
-  uint8 private rewardTax;
+  uint8 private immutable burnTax;
+  uint8 private immutable adminTax;
+  uint8 private immutable rewardTax;
   
   address public rewardsPool;
 

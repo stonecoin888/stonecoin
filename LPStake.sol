@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: UNLICENSED
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.0;
 
 import "./Context.sol";
 import "./IERC20.sol";
@@ -337,7 +337,7 @@ contract Pausable is Context {
     }
 
 
-    function paused() public view returns (bool) {
+    function paused() external view returns (bool) {
         return _paused;
     }
 
@@ -370,14 +370,14 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
     using SafeMath for uint256;
     using Address for address;
 
-    address public lpAddress;
-    address public stAddress;
+    address public immutable lpAddress;
+    address public immutable stAddress;
 
     uint256 constant BLOCKS_PER_MONTH = 864000;
     uint256 constant NUMBER_DIVISOR = 10;
     uint256 constant REWARD_SHARE_MULTIPLIER = 1e12;
 
-    uint256 public initRewardBlock;  // Initial block number that Token distribution occurs.
+    uint256 public immutable initRewardBlock;  // Initial block number that Token distribution occurs.
     uint256 public lastStakeBlock;  // Last block number that Token distribution occurs.
     uint256 public accRewardTokenPerShare;  // Accumulated Token per share, times 1e12. See below.
 
@@ -422,7 +422,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	lpLockedTotal = 0;
 	stRewardTotal = 0;
 	initRewardBlock = block.number;
-	lastStakeBlock = initRewardBlock;
+	lastStakeBlock = block.number;
     }
 
     //get acc reward from last reward block 
@@ -433,19 +433,44 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	uint j = (block.number - initRewardBlock)/BLOCKS_PER_MONTH;
 	require(j>=i, "i is greater than j");
 	uint len = reward_tiers.length;
-	if(i == j && i < len)
+	if(i == j)
 	{
-		accReward = (block.number - lastStakeBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;	
-	}else if(i >= len)
+		//i == j
+		if(i < len)
+		{
+			accReward = (block.number - lastStakeBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;	
+		}else if(i >= len)
+		{
+			accReward = (block.number - lastStakeBlock)*reward_tiers[15]*1e18/NUMBER_DIVISOR;	
+		}
+	}else
 	{
-		accReward = (block.number - lastStakeBlock)*reward_tiers[15]*1e18/NUMBER_DIVISOR;	
+		//i < j
+		if(j < len)
+		{
+			accReward = ((i+1)*BLOCKS_PER_MONTH + initRewardBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;
+                        for(uint m=i+1; m<j; m++)                                              
+                                accReward = accReward + BLOCKS_PER_MONTH*reward_tiers[m]*1e18/NUMBER_DIVISOR;
+                        accReward = accReward + (block.number - j*BLOCKS_PER_MONTH - initRewardBlock)*reward_tiers[j]*1e18/NUMBER_DIVISOR;
+		}else if(i<len)
+		{
+			accReward = ((i+1)*BLOCKS_PER_MONTH + initRewardBlock - lastStakeBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;
+                        for(uint n=i+1; n<len; n++)                      
+                                accReward = accReward + BLOCKS_PER_MONTH*reward_tiers[n]*1e18/NUMBER_DIVISOR;
+			accReward = accReward + (block.number - len*BLOCKS_PER_MONTH)*reward_tiers[15]*1e18/NUMBER_DIVISOR;
+		}else if(i>=len)
+		{
+			accReward = (block.number - lastStakeBlock)*reward_tiers[15]*1e18/NUMBER_DIVISOR;	
+		}
 	}
 	return accReward;
     }
+
     //stake LP
     function stake(uint256 _lpAmt)
-    public
+    external
     whenNotPaused
+    nonReentrant
     returns (uint256)
     {
 	require(_lpAmt>0, "_lpAmt is 0");
@@ -455,32 +480,29 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
             _lpAmt
         );
 
+	uint256 accReward = getAccReward();
         lpLockedTotal = lpLockedTotal.add(_lpAmt);
+	accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
 
 	emit LPStaked(msg.sender, _lpAmt);
-	lastStakeBlock = block.number;
 
 	User storage user = users[msg.sender];
 	if(user.isUsed == true)
 	{
-		uint256 accReward = getAccReward();
-		if(lpLockedTotal > 0)
-			accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
 		uint256 reward = user.amount.mul(accRewardTokenPerShare).div(REWARD_SHARE_MULTIPLIER).sub(user.rewardDebt);
-		user.rewardDebt = user.amount.mul(accRewardTokenPerShare).div(REWARD_SHARE_MULTIPLIER);
 		user.rewardTotal = user.rewardTotal.add(reward);
 		user.amount = user.amount.add(_lpAmt);
-		return accReward;
+		user.rewardDebt = user.amount.mul(accRewardTokenPerShare).div(REWARD_SHARE_MULTIPLIER);
+		lastStakeBlock = block.number;
 	}else
-	{
 		addUser(msg.sender, _lpAmt);
-		return 0;
-	}
+	return accReward;
     }
     //unstake LP
     function unstake(uint256 _lpAmt)
-    public
+    external
     whenNotPaused
+    nonReentrant
     returns (uint256)
     {
 	User storage user = users[msg.sender];
@@ -488,7 +510,6 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	require(user.amount >= _lpAmt, "invalid lpAmt");
 	require(_lpAmt > 0, "_lpAmt is 0");
 
-        lastStakeBlock = block.number;
 
 	uint256 accReward = getAccReward();
 	if(lpLockedTotal > 0)
@@ -500,15 +521,18 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	user.amount = user.amount.sub(_lpAmt);
 	user.rewardDebt = user.amount.mul(accRewardTokenPerShare).div(REWARD_SHARE_MULTIPLIER);
 	IERC20(lpAddress).transfer(msg.sender, _lpAmt);
-	if(user.amount == 0)
-		removeUser(msg.sender);
+
+        lastStakeBlock = block.number;
+
 	emit LPUnstaked(msg.sender, _lpAmt);
+	if(user.amount == 0 && user.rewardPayout == user.rewardTotal)
+		removeUser(msg.sender);
         return accReward;
     }
 
     //claim STONE
     function claimReward()
-    public
+    external
     nonReentrant
     returns (uint256)
     {
@@ -531,6 +555,8 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
         IERC20(stAddress).transfer(msg.sender, realReward);
 	user.rewardPayout = user.rewardPayout.add(realReward);
 	emit RewardClaimed(msg.sender, realReward);
+	if(user.amount == 0 && user.rewardPayout == user.rewardTotal)
+		removeUser(msg.sender);
 
         return realReward;
     }
@@ -539,7 +565,9 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
     	User memory user = users[_account];
 	require(user.isUsed == false, "account already exists");
 	require(_lpAmt > 0, "_lpAmt is 0");
-	users[_account] = User(_lpAmt, 0, 0, 0,  true);
+	uint256 rewardDebt = _lpAmt.mul(accRewardTokenPerShare).div(REWARD_SHARE_MULTIPLIER);
+	users[_account] = User(_lpAmt, rewardDebt, 0, 0,  true);
+	lastStakeBlock = block.number;
     }
 
     function removeUser(address account) internal {
@@ -548,24 +576,24 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	delete users[account];
     }
 
-    function pause() public onlyOwner {
+    function pause() external onlyOwner {
         _pause();
 	emit SystemPaused(msg.sender);
     }
 
-    function unpause() public onlyOwner {
+    function unpause() external onlyOwner {
         _unpause();
 	emit SystemUnpaused(msg.sender);
     }
 
 
     //call functions
-    function getTotalLockedLP() public view returns (uint256){
+    function getTotalLockedLP() external view returns (uint256){
     	return lpLockedTotal;
     }
 
     // Reward available
-    function getPendingReward(address account) public view returns (uint256){
+    function getPendingReward(address account) external view returns (uint256){
 	User memory user = users[account];
 	require(user.isUsed == true, "account no exists.");
 	uint256 accReward = getAccReward();
@@ -578,7 +606,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
     }
  
     // Reward mined
-    function getTotalReward(address account) public view returns (uint256){
+    function getTotalReward(address account) external view returns (uint256){
 	User memory user = users[account];
 	require(user.isUsed == true, "account no exists.");
 	uint256 accReward = getAccReward();
@@ -590,7 +618,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
     }
  
     // UserInfo
-    function getUserInfo(address account) public view returns(uint256, uint256, uint256){
+    function getUserInfo(address account) external view returns(uint256, uint256, uint256){
 	    User memory user = users[account];
 	    require(user.isUsed == true, "account no exists.");
 	    return(user.amount, user.rewardTotal, user.rewardPayout);
