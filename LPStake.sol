@@ -448,7 +448,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 		//i < j
 		if(j < len)
 		{
-			accReward = ((i+1)*BLOCKS_PER_MONTH + initRewardBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;
+			accReward = ((i+1)*BLOCKS_PER_MONTH + initRewardBlock - lastStakeBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;
                         for(uint m=i+1; m<j; m++)                                              
                                 accReward = accReward + BLOCKS_PER_MONTH*reward_tiers[m]*1e18/NUMBER_DIVISOR;
                         accReward = accReward + (block.number - j*BLOCKS_PER_MONTH - initRewardBlock)*reward_tiers[j]*1e18/NUMBER_DIVISOR;
@@ -457,7 +457,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 			accReward = ((i+1)*BLOCKS_PER_MONTH + initRewardBlock - lastStakeBlock)*reward_tiers[i]*1e18/NUMBER_DIVISOR;
                         for(uint n=i+1; n<len; n++)                      
                                 accReward = accReward + BLOCKS_PER_MONTH*reward_tiers[n]*1e18/NUMBER_DIVISOR;
-			accReward = accReward + (block.number - len*BLOCKS_PER_MONTH)*reward_tiers[15]*1e18/NUMBER_DIVISOR;
+			accReward = accReward + (block.number - len*BLOCKS_PER_MONTH - initRewardBlock)*reward_tiers[15]*1e18/NUMBER_DIVISOR;
 		}else if(i>=len)
 		{
 			accReward = (block.number - lastStakeBlock)*reward_tiers[15]*1e18/NUMBER_DIVISOR;	
@@ -481,8 +481,8 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
         );
 
 	uint256 accReward = getAccReward();
-        lpLockedTotal = lpLockedTotal.add(_lpAmt);
 	accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
+        lpLockedTotal = lpLockedTotal.add(_lpAmt);
 
 	emit LPStaked(msg.sender, _lpAmt);
 
@@ -496,6 +496,8 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 		lastStakeBlock = block.number;
 	}else
 		addUser(msg.sender, _lpAmt);
+
+
 	return accReward;
     }
     //unstake LP
