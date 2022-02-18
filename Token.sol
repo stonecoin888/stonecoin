@@ -169,12 +169,12 @@ contract Token is ERC20, Ownable {
   event changeRewardsPool(address rewardsPool);
   event changeUniswapPair(address uniswapV2Pair, address uniswapV2BNBPair);
  
-  constructor(string memory _name, string memory _symbol, address _owner, uint256 _launched_time) ERC20(_name, _symbol) Ownable(_owner) {
+  constructor(string memory _name, string memory _symbol, address _owner) ERC20(_name, _symbol) Ownable(_owner) {
    _mint(_owner, TOTAL_SUPPLY);
    burnTax = BURN_TAX;
    adminTax = ADMIN_TAX;
    rewardTax = REWARD_TAX;
-   launchedAtTime = _launched_time;
+   launchedAtTime = block.timestamp;
    uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
   }
  
