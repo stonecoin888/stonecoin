@@ -236,7 +236,7 @@ contract Token is ERC20, Ownable {
     require(sender != receiver, "from and to can not be the same.");
     require(amount > 0, "amount is 0");
     bool _isBuy = isBuy(sender, receiver);
-    if (_isBuy && launchedAtTime + keepProtectTime >= block.timestamp) {
+    if (_isBuy && (launchedAtTime + keepProtectTime >= block.timestamp)) {
             uint256 usdtBalance = _tokenToUsdtValue(sender, receiver, amount);
             usdtBalanceByAddr[receiver] = usdtBalanceByAddr[receiver] + usdtBalance;
             require(usdtBalanceByAddr[receiver] <= BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()), "Protect time max 1000 USDT");
