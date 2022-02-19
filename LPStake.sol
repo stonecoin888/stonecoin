@@ -481,7 +481,10 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
         );
 
 	uint256 accReward = getAccReward();
-	accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
+	if(lpLockedTotal == 0)
+		accRewardTokenPerShare = 0;
+	else
+		accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
         lpLockedTotal = lpLockedTotal.add(_lpAmt);
 
 	emit LPStaked(msg.sender, _lpAmt);
