@@ -421,6 +421,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
 	stAddress = _stAddress;
 	lpLockedTotal = 0;
 	stRewardTotal = 0;
+	accRewardTokenPerShare = 0;
 	initRewardBlock = block.number;
 	lastStakeBlock = block.number;
     }
@@ -481,9 +482,7 @@ contract LPStake is Ownable, ReentrancyGuard, Pausable {
         );
 
 	uint256 accReward = getAccReward();
-	if(lpLockedTotal == 0)
-		accRewardTokenPerShare = 0;
-	else
+	if(lpLockedTotal > 0)
 		accRewardTokenPerShare = accRewardTokenPerShare.add(accReward.mul(REWARD_SHARE_MULTIPLIER).div(lpLockedTotal));
         lpLockedTotal = lpLockedTotal.add(_lpAmt);
 
