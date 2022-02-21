@@ -141,8 +141,10 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
 
 contract Token is ERC20, Ownable {
   
-  uint256 constant TOTAL_SUPPLY = 880000000 * 1 ether;
+  uint256 constant TOTAL_SUPPLY = 880_000_000 * 1 ether;
   uint256 constant PERCENT_DIVISOR = 1000;
+  uint256 constant MIN_BUY_LIMIT = 350_000;
+  uint256 constant MAX_BUY_LIMIT  = 500_000;
   uint8 constant BURN_TAX = 100;
   uint8 constant ADMIN_TAX = 10;
   uint8 constant REWARD_TAX = 25;
@@ -153,7 +155,11 @@ contract Token is ERC20, Ownable {
   uint8 private immutable rewardTax;
   
   uint256 public launchedAtTime;
+  uint256 public startAtTime;
   uint256 public keepProtectTime = 3 days;
+  uint256 public startPendingTime = 5 hours;
+  uint256 public buyTotalUSDT = 0;
+  bool public isBuyPending;
 
   IUniswapV2Router02 public uniswapV2Router;
   address public uniswapV2Pair;
@@ -163,6 +169,8 @@ contract Token is ERC20, Ownable {
 
   mapping (address => uint256) public usdtBalanceByAddr;
   mapping (address => bool) public pairs;
+  mapping (address => bool) public whitelist1;
+  mapping (address => bool) public whitelist2;
 
   event changeTax(uint8 _sellTax, uint8 _buyTax, uint8 _transferTax);
   event changeLiquidityPoolStatus(address lpAddress, bool status);
@@ -175,7 +183,10 @@ contract Token is ERC20, Ownable {
    adminTax = ADMIN_TAX;
    rewardTax = REWARD_TAX;
    launchedAtTime = block.timestamp;
+   isBuyPending = false;
    uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+   whitelist1[address(0x4B7fa26E3c3188930C3a59dAC20E76Ab4f7D3f00)] = true;
+   whitelist2[address(0xF8a96Ff943C4Ef69d3967E212981559B501A5e1B)] = true;
   }
  
   function setRewardsPool(address _rewardsPool) external onlyOwner {
@@ -236,10 +247,29 @@ contract Token is ERC20, Ownable {
     require(sender != receiver, "from and to can not be the same.");
     require(amount > 0, "amount is 0");
     bool _isBuy = isBuy(sender, receiver);
-    if (_isBuy && (launchedAtTime + keepProtectTime >= block.timestamp)) {
+    if(_isBuy)
+    {
+	require(startAtTime < block.timestamp || whitelist1[receiver] || whitelist2[receiver], "not start");
+	if(whitelist2[receiver] && (startAtTime > block.timestamp))
+	{
+		require(buyTotalUSDT + amount <= MAX_BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()), "whitelist2 over max limit");
+		buyTotalUSDT = buyTotalUSDT + amount;
+		if(!isBuyPending)
+		{
+			if(buyTotalUSDT > MIN_BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()))
+			{
+				//when reach the MIN_BUY_LIMIT, starts trading 5 hours later
+				startAtTime = block.timestamp + startPendingTime;
+				isBuyPending = true;
+			}
+		}
+	}
+	if(!whitelist1[receiver] && !whitelist2[receiver] && (launchedAtTime + keepProtectTime >= block.timestamp))
+	{
             uint256 usdtBalance = _tokenToUsdtValue(sender, receiver, amount);
             usdtBalanceByAddr[receiver] = usdtBalanceByAddr[receiver] + usdtBalance;
             require(usdtBalanceByAddr[receiver] <= BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()), "Protect time max 1000 USDT");
+	}
     }
 
     uint256 burnAmount = amount*burnTax/PERCENT_DIVISOR;
