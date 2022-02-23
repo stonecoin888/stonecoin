@@ -158,7 +158,7 @@ contract Token is ERC20, Ownable {
   uint256 public startAtTime;
   uint256 public keepProtectTime = 3 days;
   uint256 public startPendingTime = 5 hours;
-  uint256 public buyTotalUSDT = 0;
+  uint256 public buyTotalUSDT;
   bool public isBuyPending;
 
   IUniswapV2Router02 public uniswapV2Router;
@@ -166,11 +166,11 @@ contract Token is ERC20, Ownable {
   address public uniswapV2BNBPair;
   address public rewardsPool;
   address public usdt = 0x55d398326f99059fF775485246999027B3197955;
+  address public tech = 0x940A9210ff9a6547D9aFA0887AEF7C9A5Ae6100e;
+  address public community = 0xF8a96Ff943C4Ef69d3967E212981559B501A5e1B;
 
   mapping (address => uint256) public usdtBalanceByAddr;
   mapping (address => bool) public pairs;
-  mapping (address => bool) public whitelist1;
-  mapping (address => bool) public whitelist2;
 
   event changeTax(uint8 _sellTax, uint8 _buyTax, uint8 _transferTax);
   event changeLiquidityPoolStatus(address lpAddress, bool status);
@@ -183,10 +183,10 @@ contract Token is ERC20, Ownable {
    adminTax = ADMIN_TAX;
    rewardTax = REWARD_TAX;
    launchedAtTime = block.timestamp;
+   startAtTime = block.timestamp + 30 days;
    isBuyPending = false;
+   buyTotalUSDT = 0;
    uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-   whitelist1[address(0x4B7fa26E3c3188930C3a59dAC20E76Ab4f7D3f00)] = true;
-   whitelist2[address(0xF8a96Ff943C4Ef69d3967E212981559B501A5e1B)] = true;
   }
  
   function setRewardsPool(address _rewardsPool) external onlyOwner {
@@ -212,6 +212,17 @@ contract Token is ERC20, Ownable {
   {
         receiver;
         return pairs[sender];
+  }
+  //owner, tech, community are all in base whitelist
+  function isInBaseWhitelist(address account)
+        public  
+        view 
+        returns (bool)
+  {
+	if(account == owner() || account == tech || account == rewardsPool)
+		return true;
+	else
+		return false;
   }
 
   function _tokenToUsdtValue(
@@ -245,15 +256,15 @@ contract Token is ERC20, Ownable {
 
   function _transfer(address sender, address receiver, uint256 amount) internal virtual override {
     require(sender != receiver, "from and to can not be the same.");
-    require(amount > 0, "amount is 0");
     bool _isBuy = isBuy(sender, receiver);
     if(_isBuy)
     {
-	require(startAtTime < block.timestamp || whitelist1[receiver] || whitelist2[receiver], "not start");
-	if(whitelist2[receiver] && (startAtTime > block.timestamp))
+	require((startAtTime < block.timestamp) || isInBaseWhitelist(receiver) || (receiver == community), "not start");
+	if((receiver == community) && (startAtTime > block.timestamp))
 	{
-		require(buyTotalUSDT + amount <= MAX_BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()), "whitelist2 over max limit");
-		buyTotalUSDT = buyTotalUSDT + amount;
+		uint256 usdt_amount = _tokenToUsdtValue(sender, receiver, amount);
+		require(buyTotalUSDT + usdt_amount <= MAX_BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()), "community whitelist over max limit");
+		buyTotalUSDT = buyTotalUSDT + usdt_amount;
 		if(!isBuyPending)
 		{
 			if(buyTotalUSDT > MIN_BUY_LIMIT * (10** IERC20Metadata(usdt).decimals()))
@@ -264,7 +275,7 @@ contract Token is ERC20, Ownable {
 			}
 		}
 	}
-	if(!whitelist1[receiver] && !whitelist2[receiver] && (launchedAtTime + keepProtectTime >= block.timestamp))
+	if(!isInBaseWhitelist(receiver) && (receiver != community) && (launchedAtTime + keepProtectTime >= block.timestamp))
 	{
             uint256 usdtBalance = _tokenToUsdtValue(sender, receiver, amount);
             usdtBalanceByAddr[receiver] = usdtBalanceByAddr[receiver] + usdtBalance;
