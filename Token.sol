@@ -213,7 +213,7 @@ contract Token is ERC20, Ownable {
         receiver;
         return pairs[sender];
   }
-  //owner, tech, community are all in base whitelist
+  //owner, tech, rewardsPool are all in base whitelist
   function isInBaseWhitelist(address account)
         public  
         view 
